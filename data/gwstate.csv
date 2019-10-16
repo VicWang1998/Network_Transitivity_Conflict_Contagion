@@ -1,0 +1,217 @@
+,scode,Statename,gwid
+,USA,United States of America,2
+,CAN,Canada,20
+,BHM,Bahamas,31
+,CUB,Cuba,40
+,HAI,Haiti,41
+,HAI,Haiti,41
+,DOM,Dominican Republic,42
+,JAM,Jamaica,51
+,TRI,Trinidad and Tobago,52
+,BAR,Barbados,53
+,MEX,Mexico,70
+,BLZ,Belize,80
+,UPC,United Provinces of Central America,89
+,GUA,Guatemala,90
+,HON,Honduras,91
+,SAL,El Salvador,92
+,NIC,Nicaragua,93
+,COS,Costa Rica,94
+,PAN,Panama,95
+,GCL,Great Colombia,99
+,COL,Colombia,100
+,VEN,Venezuela,101
+,GUY,Guyana,110
+,SUR,Surinam,115
+,ECU,Ecuador,130
+,PER,Peru,135
+,BRA,Brazil,140
+,BOL,Bolivia,145
+,PAR,Paraguay,150
+,CHL,Chile,155
+,ARG,Argentina,160
+,URU,Uruguay,165
+,UKG,United Kingdom,200
+,IRE,Ireland,205
+,NTH,Netherlands,210
+,BEL,Belgium,211
+,LUX,Luxembourg,212
+,FRN,France,220
+,SWZ,Switzerland,225
+,SPN,Spain,230
+,POR,Portugal,235
+,HAN,Hanover,240
+,BAV,Bavaria,245
+,GMY,Germany (Prussia),255
+,GFR,German Federal Republic,260
+,GDR,German Democratic Republic,265
+,BAD,Baden,267
+,SAX,Saxony,269
+,WRT,Württemberg,271
+,HSE,Hesse-Kassel (Electoral),273
+,HSD,Hesse-Darmstadt (Ducal),275
+,MEC,Mecklenburg-Schwerin,280
+,POL,Poland,290
+,AUH,Austria-Hungary,300
+,AUS,Austria,305
+,HUN,Hungary,310
+,CZE,Czechoslovakia,315
+,CZR,Czech Republic,316
+,SLO,Slovakia,317
+,ITA,Italy/Sardinia,325
+,PAP,Papal States,327
+,SIC,Two Sicilies,329
+,MOD,Modena,332
+,PMA,Parma,335
+,TUS,Tuscany,337
+,MLT,Malta,338
+,ALB,Albania,339
+,MNG,Montenegro,341
+,MNG,Montenegro,341
+,MAC,Macedonia (Former Yugoslav Republic of),343
+,CRO,Croatia,344
+,SER,Serbia,340
+,SER,Serbia,340
+,YUG,Yugoslavia,345
+,BOS,Bosnia-Herzegovina,346
+,KOS,Kosovo,347
+,SLV,Slovenia,349
+,GRC,Greece,350
+,CYP,Cyprus,352
+,BUL,Bulgaria,355
+,MLD,Moldova,359
+,RUM,Rumania,360
+,RUS,Russia (Soviet Union),365
+,EST,Estonia,366
+,EST,Estonia,366
+,LAT,Latvia,367
+,LAT,Latvia,367
+,LIT,Lithuania,368
+,LIT,Lithuania,368
+,UKR,Ukraine,369
+,BLR,Belarus (Byelorussia),370
+,ARM,Armenia,371
+,GRG,Georgia,372
+,AZE,Azerbaijan,373
+,FIN,Finland,375
+,SWD,Sweden,380
+,NOR,Norway,385
+,DEN,Denmark,390
+,ICE,Iceland,395
+,CAP,Cape Verde,402
+,GNB,Guinea-Bissau,404
+,EQG,Equatorial Guinea,411
+,GAM,Gambia,420
+,MLI,Mali,432
+,SEN,Senegal,433
+,BEN,Benin,434
+,MAA,Mauritania,435
+,NIR,Niger,436
+,CDI,Cote D’Ivoire,437
+,GUI,Guinea,438
+,BFO,Burkina Faso (Upper Volta),439
+,LBR,Liberia,450
+,SIE,Sierra Leone,451
+,GHA,Ghana,452
+,TOG,Togo,461
+,CAO,Cameroon,471
+,NIG,Nigeria,475
+,GAB,Gabon,481
+,CEN,Central African Republic,482
+,CHA,Chad,483
+,CON,Congo,484
+,DRC,"Congo, Democratic Republic of (Zaire)",490
+,UGA,Uganda,500
+,KEN,Kenya,501
+,TAZ,Tanzania/Tanganyika,510
+,ZAN,Zanzibar,511
+,BUI,Burundi,516
+,RWA,Rwanda,517
+,SOM,Somalia,520
+,DJI,Djibouti,522
+,ETH,Ethiopia,530
+,ERI,Eritrea,531
+,ANG,Angola,540
+,MZM,Mozambique,541
+,ZAM,Zambia,551
+,ZIM,Zimbabwe (Rhodesia),552
+,MAW,Malawi,553
+,SAF,South Africa,560
+,TRA,Transvaal,563
+,OFS,Orange Free State,564
+,NAM,Namibia,565
+,LES,Lesotho,570
+,BOT,Botswana,571
+,SWA,Swaziland,572
+,MAG,Madagascar (Malagasy),580
+,MAG,Madagascar,580
+,COM,Comoros,581
+,MAS,Mauritius,590
+,MOR,Morocco,600
+,MOR,Morocco,600
+,ALG,Algeria,615
+,ALG,Algeria,615
+,TUN,Tunisia,616
+,TUN,Tunisia,616
+,LIB,Libya,620
+,LIB,Libya,620
+,SUD,Sudan,625
+,SSD,South Sudan,626
+,IRN,Iran (Persia),630
+,TUR,Turkey (Ottoman Empire),640
+,IRQ,Iraq,645
+,EGY,Egypt,651
+,EGY,Egypt,651
+,SYR,Syria,652
+,LEB,Lebanon,660
+,JOR,Jordan,663
+,ISR,Israel,666
+,SAU,Saudi Arabia,670
+,YEM,Yemen (Arab Republic of Yemen),678
+,YPR,"Yemen, People's Republic of",680
+,KUW,Kuwait,690
+,BAH,Bahrain,692
+,QAT,Qatar,694
+,UAE,United Arab Emirates,696
+,OMA,Oman,698
+,AFG,Afghanistan,700
+,AFG,Afghanistan,700
+,TKM,Turkmenistan,701
+,TAJ,Tajikistan,702
+,KYR,Kyrgyz Republic,703
+,UZB,Uzbekistan,704
+,KZK,Kazakhstan,705
+,CHN,China,710
+,TBT,Tibet,711
+,MON,Mongolia,712
+,TAW,Taiwan,713
+,KOR,Korea,730
+,PRK,"Korea, People's Republic of",731
+,ROK,"Korea, Republic of",732
+,JPN,Japan,740
+,IND,India,750
+,BHU,Bhutan,760
+,PAK,Pakistan,770
+,BNG,Bangladesh,771
+,MYA,Myanmar (Burma),775
+,MYA,Myanmar (Burma),775
+,SRI,Sri Lanka (Ceylon),780
+,MAD,Maldives,781
+,NEP,Nepal,790
+,THI,Thailand,800
+,CAM,Cambodia (Kampuchea),811
+,LAO,Laos,812
+,VNM,Vietnam (Annam/Cochin China/Tonkin),815
+,DRV,"Vietnam, Democratic Republic of",816
+,RVN,"Vietnam, Republic of",817
+,MAL,Malaysia,820
+,SIN,Singapore,830
+,BRU,Brunei,835
+,PHI,Philippines,840
+,INS,Indonesia,850
+,ETM,East Timor,860
+,AUL,Australia,900
+,PNG,Papua New Guinea,910
+,NEW,New Zealand,920
+,SOL,Solomon Islands,940
+,FJI,Fiji,950
