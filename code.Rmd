@@ -1,0 +1,526 @@
+---
+title: "Code"
+author: "Victoria Wang"
+date: "10/22/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Do Denser Ethnic Ties Affect Intrastate Conflict Contagion?
+### Ethnic Kinship Network Transitivity and Intrastate Conflict Contagion
+
+
+#### This notebook contains all the codes used to process/analyze data and establish models. 
+
+First, we read in all the packages we need. 
+```{r}
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(stringr)
+library(igraph)
+library(tidyverse)
+library(visNetwork)
+library(caret)
+library(pscl)
+library(reshape2)
+library(lmtest)
+```
+
+## Construct Dataframe for Control Variables
+
+I am merging multiple datasets, some coded countries with 3-char state abbreviation, others (i.e. UCDP datasets) coded countries with Gleditsch and Ward (GW) State Codes. I am using a dataset of 3-char state code and GW code as a reference to correctly combine the different datasets. 
+
+```{r pressure, echo=FALSE}
+gwid <- read_csv("data/gwstate.csv") # Gleditsch and Ward State Codes
+gwid <- unique(gwid[,c(2,4)])
+head(gwid)
+```
+
+Below are the datasets that contain: 
+  1. Dyadic transborder ethnic kinship data used to construct the network. 
+  2. all the control variables I'll be using for the model. 
+
+```{r}
+# Read in all the necessary data
+epr_raw <- read_csv("data/epr.csv")
+tek_raw <- read_csv("data/tek.csv") # Dyad data
+gdp_raw <- read_csv("data/gdp.csv") # GDP growth rates (I ended up not using it)
+pcgdp_raw <- read_csv("data/pcgdp.csv") # Per-capita GDP
+pol_scr_raw <- read_csv("data/pol_scr.csv") # Polity Score
+war_raw <- read_csv("data/wars.csv") # Response variable: binary codes for state-year war incidence
+region <- read_csv('data/state_region.csv') # UN/World Bank-defined geographical categorization of states
+```
+
+```{r}
+# Process polity score data
+pol_scr <- pol_scr_raw %>% filter(as.numeric(year) %in% 1960:2017) %>% select(scode, year, 'polity' = polity2)
+head(pol_scr)
+
+# Process per-capita GDP data
+colnames(pcgdp_raw)[5] <- 1962
+pcgdp <- melt(pcgdp_raw, id = c('statename', 'scode'))
+colnames(pcgdp) <- c('statename', 'scode', 'year', 'pcgdp')
+pcgdp$year <- as.numeric(substr(pcgdp$year, 0, 4))
+
+mean <- pcgdp[pcgdp$pcgdp != '..',] %>% group_by(scode, statename) %>% summarize(mean = format(round(mean(as.numeric(pcgdp)), 2), nsmall = 2)) %>% ungroup()
+pcgdp <- left_join(pcgdp, mean, by = c('scode', 'statename'))
+pcgdp[pcgdp$pcgdp == '..', 4] <- pcgdp[pcgdp$pcgdp == '..', 5]
+
+pcgdp <- pcgdp[,2:4]
+pcgdp$pcgdp <- as.numeric(pcgdp$pcgdp)
+
+tail(pcgdp)
+
+# Merge them into one dataset called war_final
+war_final <- left_join(gwid, pol_scr, by = c('scode'))
+war_final <- left_join(war_final, pcgdp, by = c('scode', 'year'))
+war_final$pcgdp <- as.numeric(war_final$pcgdp)
+
+# Process war data
+war <- war_raw %>% filter(countries_gwid %in% war_final$gwid) %>% filter(year >= 1960) %>% 
+select(gwid = countries_gwid, year,
+       statename = countryname, incidence_flag, 
+       incidence_terr_flag, incidence_gov_flag, 
+       incidence_eth_flag, incidence_terr_eth_flag, 
+       incidence_gov_eth_flag, warhist, peaceyears)
+
+# Merge everything together
+war_final <- left_join(war, war_final, by = c('gwid', 'year'))
+head(war_final)
+```
+
+See how bad our missing values are. 
+
+```{r}
+sapply(war_final, function(x) sum(is.na(x)))
+```
+
+## Construct Network Data
+
+```{r}
+# Add region variable to states
+tek <- merge(tek_raw, region, by = 'statename', all = TRUE)
+tek <- tek %>% filter(!is.na(tekid))
+
+# Patch up missing values
+tek[tek$statename %in% c('Brunei', 'Democratic People\'s Republic of Korea', 'Laos', 'Republic of Korea', 'Republic of Vietnam', 'Solomon Is.', 'Taiwan', 'Timor Leste'), "region"] <- 'East Asia and Pacific'
+tek[tek$statename %in% c('Cape Verde', 'Congo', 'Congo, DRC', 'Cote d\'Ivoire', 'The Gambia'), "region"] <- 'Sub-Saharan Africa'
+tek[tek$statename %in% c('Czechoslovakia', 'Germany Democratic Republic', 'Kyrgyzstan', 'Macedonia', 'Russia', 'Serbia and Montenegro', 'Slovakia'), "region"] <- 'Europe and Central Asia'
+tek[tek$statename %in% c('Egypt', 'Iran', 'Libya (Tripolitania, Cyrenaica, Fezzan)', 'Syria', 'Yemen', 'Yemen People\'s Republic'), "region"] <- 'Middle East and North Africa'
+tek[tek$statename %in% c('Guyana (British Guiana)', 'Venezuela'), "region"] <- 'Latin America and the Carribean'
+
+# One tek group in a country may be under many names, so collapse them into one row
+tek <- tek %>% group_by(statename, gwid, tekid, region) %>% 
+summarize(groupids = paste(gwgroupid, collapse = ", "), groupnames = paste(groupname, collapse = ", ")) %>% ungroup()
+```
+
+```{r}
+# Use state IDs as nodes
+nodes_world <- tek %>% select(gwid, statename, region)
+nodes_world <- unique(nodes_world)
+head(nodes_world)
+```
+
+```{r}
+# Define a function that makes an edgelist for a set of TEK data
+get_edge_list <- function(tekdata) {
+    data_final = c()
+    
+    for (i in 1:nrow(tekdata)){
+        
+        # Preparations
+        this_grp <- tekdata$tekid[i]
+        this_name <- tekdata$groupnames[i]
+        this_grpid <- tekdata$groupids[i]
+        sid <- tekdata$gwid[i]
+        sname <- tekdata$statename[i]
+    
+        temp <- tekdata %>% filter(tekid == this_grp, gwid != sid) %>% # Select foreign countries with the same TEK group
+        filter(!(gwid %in% data_final$sourceid)) %>% # Select countries that have not gone through this loop
+        mutate(sourceid = sid, sourcename = sname)
+        temp$groupnames <- interaction(this_name, temp$groupnames, sep = ", ")
+        temp$groupids <- interaction(this_grpid, temp$groupids, sep = ", ")
+        data_final <- rbind(data_final, temp)
+    }
+    
+    # Mark source and destination
+    route <- data_final %>% select(tekid, groupids, groupnames, sourceid, sourcename, desid = gwid, desname = statename) 
+    #edges <- route %>% select(from = sourceid, to = desid)
+    return(route)
+}
+```
+
+Let's have a look at today's world in a TEK network! 
+
+```{r}
+route_world <- get_edge_list(tek) # Make edgelist
+
+# Construct network
+nodes <- data.frame(id = nodes_world$gwid, 
+                    title = nodes_world$statename,
+                    group = nodes_world$region)
+
+edges <- data.frame(from = route_world$sourceid, 
+                    to = route_world$desid,
+                    title = route_world$groupnames) # tooltip
+
+# Have a look at the network
+visNetwork(nodes, edges) %>% 
+visIgraphLayout(layout = "layout_with_fr") %>%
+visInteraction(tooltipStyle = 'position: fixed; visibility: hidden; padding: 5px; white-space: nowrap; font-family: sans-serif; font-size: 14px; font-color: darkblue; background-color: lightblue;') %>%
+visEdges(shadow = F,
+         color = list(color = "lightblue", highlight = "darkblue")) %>%
+visOptions(selectedBy = "group", 
+           highlightNearest = TRUE, 
+           nodesIdSelection = TRUE) %>%
+visPhysics(stabilization = FALSE)
+```
+
+```{r}
+# Make an igraph object for all states across all years
+g <- graph_from_data_frame(edges, directed = FALSE, vertices = nodes)
+```
+
+Just for fun, let's visualize some conflict occurences in a given time period (1960 - 1965)
+
+```{r}
+war_fun <- war_final %>% filter(year %in% 1960:1965) %>% group_by(gwid) %>% 
+summarize(incidence_all = sum(incidence_flag)) %>% ungroup() #%>% group_by(gwid) %>% summarize(count = n()) %>% ungroup()
+
+nodes_world_fun <- inner_join(nodes_world, war_fun, by = 'gwid')
+
+# Get the TEK data for states that were on record during this year segment 
+tek_fun <- tek %>% filter(gwid %in% nodes_world_fun$gwid)
+
+# Get nodes
+nodes_fun <- nodes_world_fun %>% select(gwid, statename, incidence_all)
+
+# Get edgelist
+route_fun <- get_edge_list(tek_fun)
+
+nodes_fun <- data.frame(id = nodes_fun$gwid, 
+                        title = nodes_fun$statename,
+                        value = nodes_fun$incidence_all)
+nodes_fun$color <- ifelse(nodes_fun$value > 0, "red", "darkblue")
+
+edges_fun <- data.frame(from = route_fun$sourceid, 
+                        to = route_fun$desid, 
+                        title = route_fun$groupnames) # tooltip
+
+visNetwork(nodes_fun, edges_fun) %>% 
+visIgraphLayout(layout = "layout_with_fr") %>%
+visInteraction(tooltipStyle = 'position: fixed; visibility: hidden; padding: 5px; white-space: nowrap; font-family: sans-serif; font-size: 14px; font-color: darkblue; background-color: lightblue;') %>%
+visEdges(shadow = F,
+         color = list(color = "lightblue", highlight = "darkblue")) %>%
+visPhysics(stabilization = FALSE)
+```
+
+To actually calculate year-state specific data about neighborhood conflict counts and clustering coefficient, we need to look at the different versions of the TEK network in each different year. Some states may not exist in early years -- the post Soviet states before 1950, for example -- which means that we need to construct a different global network for each given year and calculate our numbers. 
+
+#### Define a helper function that returns the clustering coefficients for a year-network
+
+```{r}
+count_coef <- function(g){ # g -> the network in this given year; df -> war data for the given year
+
+   coefs <- data.frame()
+    
+    # Loop through every node
+    for(state in V(g)$name){
+        neighbors <- neighbors(g, state)$name
+        neighbors <- append(neighbors, state) # Get the neighborhood
+        
+        # If the state actually has neighbors...
+        if(length(neighbors) != 0){
+            g_temp <- induced_subgraph(g, neighbors) # Get subgraph of 1st-degree neighbors
+            clr_coef <- transitivity(g_temp) # Calculate clustering coefficient
+
+            # If there are strong ties
+            if(!is.na(clr_coef)){
+                clr_coef <- format(round(clr_coef, 3), nsmall = 2) # Calculate clustering coefficient
+            }
+            else{
+                clr_coef <- 0.01
+            }
+            
+        }
+        
+        # If no neighbors at all
+        else{
+            clr_coef <- 0.001
+        }
+ 
+        temp <- data.frame(
+            gwid = as.numeric(state),
+            coef = as.numeric(clr_coef),
+            stringsAsFactors = FALSE
+        ) # Put the result in a dataframe and...
+        
+        
+        coefs <- rbind(coefs, temp) # Append it to the dataframe to be returned
+    }
+    # After looping through every node
+    return(coefs)
+}
+```
+
+Quick test to see if it works. This is the plot of squared clustering coefficient of every state's direct neighborhood (the subplot that contains nodes directly connected to the state). The numbers are squared so they wouldn't be too polarized.
+
+```{r}
+test <- count_coef(g) # Get it for every state in the TEK network
+
+ggplot(test, aes(x = gwid, y = coef^2)) +
+geom_point() + 
+labs(x = "state ID", y = "clustering coefficient")
+```
+
+#### Define a helper function that returns the number of violence occurring in every state's contact neighborhood for a given TEK network. 
+
+```{r}
+count_nei_con <- function(g, df){ # g -> the network in this given year; df -> war data for the given year
+    
+    nei_cons <- data.frame() # Placeholder for neighbor counts
+    for(state in V(g)$name){
+        neighbors <- neighbors(g, state)$name # Get all the neighbors' names
+        
+        # If the state actually has neighbors...
+        if(length(neighbors) != 0){
+            t <- df %>% filter(gwid %in% neighbors)
+            t <- sum(t$incidence_all) # Calculate the neighborhood in this given year
+        }
+        
+        # If no neighbors at all
+        else{
+            t <- 0
+        }
+        dft <- data.frame(gwid = as.numeric(state), 
+                          nei_curr = as.numeric(t))
+        
+        nei_cons <- rbind(nei_cons, dft) # Add to the list of numbers
+    }
+    return(nei_cons)
+}
+```
+
+#### Define a helper function to get clustering coefs for all states in a given year. 
+
+```{r}
+count_stuff <- function(df, y){
+    war_t <- df %>% filter(year == y) %>% group_by(gwid) %>% summarize(year = y, incidence_all = sum(incidence_flag)) %>% ungroup()
+    
+    t1 <- war_t %>% group_by(gwid) %>% summarize(year = y) %>% ungroup() # Make a placeholder for year
+    
+    ### Make graph objects with states in this year ###
+    
+    nodes_t <- inner_join(nodes_world, war_t, by = 'gwid')
+    tek_t <- tek %>% filter(gwid %in% nodes_t$gwid) # Get the TEK data for states that were on record during this year segment 
+ 
+    nodes <- data.frame(id = nodes_t$gwid, 
+                        title = nodes_t$statename)
+    
+    # Get edgelist
+    route_t <- get_edge_list(tek_t)
+    edges <- data.frame(from = route_t$sourceid, 
+                        to = route_t$desid, 
+                        group = route_t$groupnames)
+    
+    # Make an igraph object
+    g <- graph_from_data_frame(edges, directed = FALSE, vertices = nodes)
+    
+    # 1. count the clustering coefs in this graph
+    clr_coef <- count_coef(g)
+    # Add it on to placeholder t1
+    t1 <- inner_join(t1, clr_coef, by = 'gwid')
+    
+    # 2. count the number of neighbors in conflict
+    t2 <- count_nei_con(g, war_t)
+    
+    temp <- merge(t1, t2, by = 'gwid')
+    
+    return(temp)
+}
+```
+
+#### Construct the almost-final dataset using the above functions -- it takes a while to run. 
+
+```{r takes very long to run}
+vars <- data.frame()
+
+for(y in 1960:2017){
+    
+    vars <- rbind(vars, count_stuff(war_final, y))
+}
+
+war_final <- left_join(war_final, vars, by = c('gwid', 'year'))
+head(war_final)
+```
+
+#### Further data processing: address missing data
+
+```{r}
+# Get the number of conflicts in neighborhood the previous year
+f1 <- data.frame()
+for(y in 1960:2017){
+    war_curr <- war_final %>% filter(year == y)
+    war_prev <- war_final %>% filter(year == y-1) %>% select(gwid, nei_prev = nei_curr)
+    war_curr <- left_join(war_curr, war_prev, by = 'gwid')
+    war_curr[is.na(war_curr$nei_prev),]$nei_prev <- 0
+    f1 <- rbind(f1, war_curr)
+}
+
+# Get the conflict dummy of the state itself the previous year
+final <- data.frame()
+for(y in 1961:2017){
+    war_curr <- f1 %>% filter(year == y)
+    war_prev <- f1 %>% filter(year == y-1) %>% select(gwid, ego_prev = incidence_flag)
+    war_curr <- left_join(war_curr, war_prev, by = 'gwid')
+    final <- rbind(final, war_curr)
+}
+
+# Address missing values in neighbor conflict counts and clustering coefs with 0
+final[is.na(final$nei_curr),]$nei_curr <- 0
+final[is.na(final$coef),]$coef <- 0
+
+# Address some NA in pcgdp with mean
+t <- final %>% group_by(gwid) %>% summarize(rpl = mean(pcgdp, na.rm = TRUE)) %>% ungroup()
+final <- left_join(final, t, by = 'gwid')
+final$pcgdp[is.na(final$pcgdp)] <- final$rpl[is.na(final$pcgdp)]
+final <- final[,1:(ncol(final)-1)]
+
+# Do the same for polity
+t <- final %>% group_by(gwid) %>% summarize(rpl = mean(polity, na.rm = TRUE)) %>% ungroup()
+final <- left_join(final, t, by = 'gwid')
+final$polity[is.na(final$polity)] <- final$rpl[is.na(final$polity)]
+final <- final[,1:(ncol(final)-1)]
+
+# Drop everything without polity score and ego_prev
+final <- final[!is.na(final$polity), ]
+final <- final[!is.na(final$ego_prev), ]
+
+head(final)
+```
+
+Have a look at the missing calues again. 
+
+```{r}
+sapply(final, function(x) sum(is.na(x)))
+```
+
+#### I DON'T KNOW HOW TO ADDRESS THE FOLLOWING MISSING DATA. THIS METHOD IS TEMPORARY
+
+```{r}
+final[is.na(final$pcgdp),]$pcgdp <- 500
+```
+
+####  __WORKING PROCESS__ Exploratory analysis
+
+```{r}
+final <- final %>% mutate(coef_sq = coef^2)
+```
+
+```{r}
+ggplot(final, aes(x = as.factor(incidence_flag), y = coef_sq)) + 
+geom_boxplot(outlier.colour="red", 
+             outlier.shape=8,
+             outlier.size=4)
+```
+
+```{r}
+ggplot(final, aes(x = as.factor(incidence_flag), y = polity)) + 
+geom_boxplot(outlier.colour="red", 
+             outlier.shape=8,
+             outlier.size=4)
+```
+
+### __WORKING PROCESS__ Model Construction And Evaluation
+```{r}
+# Baseline model
+fit_base <- glm(as.factor(incidence_flag) ~ polity + log(pcgdp), data = final, family = "binomial")
+summary(fit_base)
+```
+
+```{r}
+# Trial a
+fit_a <- glm(as.factor(incidence_flag) ~ polity + log(pcgdp) + ego_prev, data = final, family = "binomial")
+summary(fit_a)
+```
+
+```{r}
+# Trial b
+fit_b <- glm(as.factor(incidence_flag) ~ polity + log(pcgdp) + ego_prev + nei_prev + nei_curr, data = final, family = "binomial")
+summary(fit_b)
+```
+
+```{r}
+# Trial c
+fit_c <- glm(as.factor(incidence_flag) ~ polity + log(pcgdp)+ coef_sq + ego_prev + nei_prev + nei_curr + coef_sq:nei_prev, data = final, family = "binomial")
+summary(fit_c)
+```
+
+Summary stats says that coef_sq, coef_sq:nei_prev interaction are both significant. 
+### Diagnostic
+
+Borrow method from Esarey, Justin & Andrew Pierce. 2012. Assessing fit quality and testing for misspecification in binary-dependent variable models. Political Analysis 20(4): 480-500. 
+
+### Test Model Performance
+
+```{r}
+train_inds <- caret::createDataPartition(final$incidence_flag, p = 0.75)
+train_val <- final %>% dplyr::slice(train_inds[[1]])
+test <- final %>% dplyr::slice(-train_inds[[1]])
+
+set.seed(19980224)
+val_folds <- caret::createFolds(train_val$incidence_flag, k = 6)
+```
+
+We do 6-fold cross validation to test the accuracy for the final model.  
+
+```{r}
+df_mse <- data.frame()
+val_fold_num <- names(val_folds)
+
+for (i in 1:length(val_fold_num)){
+  temp <- data.frame()
+  fold <- val_fold_num[i]
+  
+  # Get train val split
+  val <- train_val %>% slice(val_folds[[fold]])
+  train <- train_val %>% slice(-val_folds[[fold]])
+  
+  # Train the model
+  fit_2 <- train(
+    form = as.factor(incidence_flag) ~ polity + log(pcgdp)+ coef_sq + ego_prev + nei_prev + nei_curr + coef_sq:nei_prev,
+    data = train,
+    family = "binomial", 
+    method = "glm", # method for fit; "generalized linear model"
+    trControl = trainControl(method = "none")
+    )
+  
+  # Calculate validation set mse
+  # Same deal with transformation
+  test_hat <- predict(fit_2, newdata = val, type = "raw")
+  val_mse <- mean(as.factor(val$incidence_flag) != test_hat)
+  
+  temp <- data.frame("Fold" = fold, val_mse)
+  df_mse <- rbind(df_mse, temp)
+  }
+df_mse
+```
+
+Try it on test set:
+
+```{r}
+fit <- train(
+    form = as.factor(incidence_flag) ~ polity + log(pcgdp)+ coef_sq + ego_prev + nei_prev + nei_curr + coef_sq:nei_prev,
+    data = train_val,
+    family = "binomial", 
+    method = "glm", # method for fit; "generalized linear model"
+    trControl = trainControl(method = "none")
+)
+
+test_hat <- predict(fit, newdata = test, type = "raw")
+mean(as.factor(test$incidence_flag) != test_hat)
+```
